@@ -47,7 +47,7 @@ port (
 	-- K7 connector
 	K7_TAPEIN         : in    std_logic;
 	K7_TAPEOUT        : out   std_logic;
-LED        : out   std_logic;
+
 --	K7_REMOTE         : out   std_logic;
 --	K7_AUDIOOUT       : out   std_logic;
 
@@ -197,7 +197,8 @@ begin
 --	clk24 <= clkfx;
 	inst_buf0 : BUFG port map (I => clkfx,      O => clk24);
 	inst_buf1 : BUFG port map (I => scanctr(0), O => clk12);
-	inst_buf2 : BUFG port map (I => scanctr(1), O => clk6);
+--	inst_buf2 : BUFG port map (I => scanctr(1), O => clk6);
+	clk6 <= scanctr(1);
 
 	------------------------------------------------
 
@@ -318,18 +319,18 @@ begin
 		clength     => 240,  -- composite sync length
 
 		-- output video timing
-		hA          =>  54,	-- h front porch
-		hB          =>  30,	-- h sync
-		hC          =>  60,	-- h back porch
+		hA          =>  10,	-- h front porch
+		hB          =>  46,	-- h sync
+		hC          =>  24,	-- h back porch
 		hD          => 240,	-- visible video
 
 --		vA          =>  34,	-- v front porch (not used)
 		vB          =>   2,	-- v sync
-		vC          =>  52,	-- v back porch
+		vC          =>  20,	-- v back porch
 		vD          => 224,	-- visible video
 
-		hpad        =>   0,	-- H black border
-		vpad        =>   0	-- V black border
+		hpad        =>  32,	-- H black border
+		vpad        =>  32	-- V black border
 	)
 	port map (
 		I_VIDEO(15 downto 12) => "0000",
@@ -368,8 +369,8 @@ begin
 
 	-- HDMI driver section start --
 	OBUFDS_clk : OBUFDS port map ( O => TMDS_P(3), OB => TMDS_N(3), I => clk_s );
-	OBUFDS_grn : OBUFDS port map ( O => TMDS_P(2), OB => TMDS_N(2), I => red_s );
-	OBUFDS_red : OBUFDS port map ( O => TMDS_P(1), OB => TMDS_N(1), I => grn_s );
+	OBUFDS_red : OBUFDS port map ( O => TMDS_P(2), OB => TMDS_N(2), I => red_s );
+	OBUFDS_grn : OBUFDS port map ( O => TMDS_P(1), OB => TMDS_N(1), I => grn_s );
 	OBUFDS_blu : OBUFDS port map ( O => TMDS_P(0), OB => TMDS_N(0), I => blu_s );
 
 	s_blank <= not s_cmpblk_n_out;
@@ -412,8 +413,6 @@ begin
 	-- VIA
 	------------------------------------------------------------
 	ula_CSIO <= not ula_CSIOn;
-
-	LED <= K7_TAPEIN;
 
 	inst_via : entity work.M6522
 	port map (
