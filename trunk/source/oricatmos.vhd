@@ -80,12 +80,13 @@ architecture RTL of ORIC is
 	signal clk24              : std_logic := '0';
 	signal clk12              : std_logic := '0';
 	signal clk6               : std_logic := '0';
-	signal clkfx              : std_logic := '0';
 	signal clk_aud            : std_logic := '0';
 	signal clkout0            : std_logic := '0';
 	signal clkout1            : std_logic := '0';
 	signal clkout2            : std_logic := '0';
 	signal clkout3            : std_logic := '0';
+	signal clkout4            : std_logic := '0';
+	signal clkout5            : std_logic := '0';
 	signal pll_locked         : std_logic := '0';
 
 	-- cpu
@@ -138,15 +139,7 @@ architecture RTL of ORIC is
 	signal ula_VIDEO_B        : std_logic;
 	signal ula_SYNC           : std_logic;
 
-	signal lSRAM_D            : std_logic_vector( 7 downto 0);
-	signal ENA_1MHZ           : std_logic;
 	signal ROM_DO             : std_logic_vector( 7 downto 0);
-
-	-- HEARTBEAT
-	signal d2, d1, d0         : std_logic_vector( 3 downto 0);
-	signal watch              : std_logic_vector(15 downto 0);
-	signal count_irq          : std_logic_vector(15 downto 0);
-	signal count_clk          : std_logic_vector( 7 downto 0) := (others=>'0');
 
 	-- VIDEO
 	signal HSync              : std_logic;
@@ -154,7 +147,6 @@ architecture RTL of ORIC is
 	signal hs_int             : std_logic;
 	signal vs_int             : std_logic;
 	signal dummy              : std_logic_vector( 3 downto 0) := (others => '0');
-	signal scanctr            : std_logic_vector( 1 downto 0) := (others => '0');
 	signal s_cmpblk_n_out     : std_logic;
 
 	signal VideoR             : std_logic_vector(3 downto 0);
@@ -167,45 +159,79 @@ architecture RTL of ORIC is
 
 	signal clk_dvi_p          : std_logic;
 	signal clk_dvi_n          : std_logic;
+	signal clk_dvi_pixel      : std_logic;
 	signal clk_s              : std_logic;
-   signal s_blank            : std_logic;
+	signal s_blank            : std_logic;
 
 begin
-	pll_locked <= not I_RESET;
-
-	------------------------------------------------------------
-	-- clock section
-	------------------------------------------------------------
-
-	dcm_24m : DCM_SP
+	-----------------------------------------------
+	-- generate all the system clocks required
+	-----------------------------------------------
+	inst_pll_base : PLL_BASE
 	generic map (
-		CLKFX_DIVIDE   => 25,
-		CLKFX_MULTIPLY => 12,
-		CLKIN_PERIOD   => 20.0
+		BANDWIDTH          => "OPTIMIZED", -- "HIGH", "LOW" or "OPTIMIZED"
+		COMPENSATION       => "SYSTEM_SYNCHRONOUS", -- "SYSTEM_SYNCHRNOUS", "SOURCE_SYNCHRNOUS", "INTERNAL", "EXTERNAL", "DCM2PLL", "PLL2DCM"
+		CLKIN_PERIOD       => 20.00, -- Clock period (ns) of input clock on CLKIN
+		-- 1/12 gives exact Oric clock but the DVI clock is 1MHz below spec and some monitors won't lock
+		-- 2/25 makes Oric run 4.166% faster but brings DVI clock in spec
+		DIVCLK_DIVIDE      => 2,     -- Division factor for all clocks (1 to 52)
+		CLKFBOUT_MULT      => 25,    -- Multiplication factor for all output clocks (1 to 64)
+		CLKFBOUT_PHASE     => 0.0,   -- Phase shift (degrees) of all output clocks
+		REF_JITTER         => 0.100, -- Input reference jitter (0.000 to 0.999 UI%)
+		-- 120Mhz positive
+		CLKOUT0_DIVIDE     => 5,     -- Division factor for CLKOUT0 (1 to 128)
+		CLKOUT0_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT0 (0.01 to 0.99)
+		CLKOUT0_PHASE      => 0.0,   -- Phase shift (degrees) for CLKOUT0 (0.0 to 360.0)
+		-- 120Mhz negative
+		CLKOUT1_DIVIDE     => 5,     -- Division factor for CLKOUT1 (1 to 128)
+		CLKOUT1_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT1 (0.01 to 0.99)
+		CLKOUT1_PHASE      => 180.0, -- Phase shift (degrees) for CLKOUT1 (0.0 to 360.0)
+		-- 24Mhz
+		CLKOUT2_DIVIDE     => 25,    -- Division factor for CLKOUT2 (1 to 128)
+		CLKOUT2_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT2 (0.01 to 0.99)
+		CLKOUT2_PHASE      => 0.0,   -- Phase shift (degrees) for CLKOUT2 (0.0 to 360.0)
+		-- 24Mhz
+		CLKOUT3_DIVIDE     => 25,    -- Division factor for CLKOUT3 (1 to 128)
+		CLKOUT3_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT3 (0.01 to 0.99)
+		CLKOUT3_PHASE      => 0.0,   -- Phase shift (degrees) for CLKOUT3 (0.0 to 360.0)
+		-- 12Mhz
+		CLKOUT4_DIVIDE     => 50,    -- Division factor for CLKOUT4 (1 to 128)
+		CLKOUT4_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT4 (0.01 to 0.99)
+		CLKOUT4_PHASE      => 180.0, -- Phase shift (degrees) for CLKOUT4 (0.0 to 360.0)
+		-- 6MHz
+		CLKOUT5_DIVIDE     => 100,   -- Division factor for CLKOUT5 (1 to 128)
+		CLKOUT5_DUTY_CYCLE => 0.5,   -- Duty cycle for CLKOUT5 (0.01 to 0.99)
+		CLKOUT5_PHASE      => 0.0    -- Phase shift (degrees) for CLKOUT5 (0.0 to 360.0)
 	)
-	port map(
-		CLKIN => CLK_50,
-		CLKFX => clkfx
+	port map (
+		CLKFBOUT => CLKFB,      -- General output feedback signal
+		CLKOUT0  => clkout0,
+		CLKOUT1  => clkout1,
+		CLKOUT2  => clkout2,
+		CLKOUT3  => clkout3,
+		CLKOUT4  => clkout4,
+		CLKOUT5  => clkout5,
+		LOCKED   => pll_locked, -- Active high PLL lock signal
+		CLKFBIN  => CLKFB,      -- Clock feedback input
+		CLKIN    => CLK_50,     -- Clock input
+		RST      => I_RESET     -- Asynchronous PLL reset
 	);
 
-	process
-	begin
-		wait until rising_edge(clk24);
-		scanctr <= scanctr + 1;
-	end process;
 
---	clk24 <= clkfx;
-	inst_buf0 : BUFG port map (I => clkfx,      O => clk24);
-	inst_buf1 : BUFG port map (I => scanctr(0), O => clk12);
---	inst_buf2 : BUFG port map (I => scanctr(1), O => clk6);
-	clk6 <= scanctr(1);
+	-- Distribute some PLL clocks globally
+	inst_buf0 : BUFG port map (I => clkout0, O => clk_dvi_p);
+	inst_buf1 : BUFG port map (I => clkout1, O => clk_dvi_n);
+	inst_buf2 : BUFG port map (I => clkout2, O => clk_dvi_pixel);
+	inst_buf3 : BUFG port map (I => clkout3, O => clk24);
+	inst_buf4 : BUFG port map (I => clkout4, O => clk12);
+	clk6 <= clkout5;
 
 	------------------------------------------------
 
 --	CLK_EXT <= ula_phi2;
 
 	-- Reset
-	loc_reset_n <=     pll_locked;
+	loc_reset_n <= pll_locked;
 
 	------------------------------------------------------------
 	-- CPU 6502
@@ -375,23 +401,11 @@ begin
 
 	s_blank <= not s_cmpblk_n_out;
 
-	inst_dcm : DCM_SP
-		generic map (
-			CLKFX_DIVIDE   => 5,
-			CLKFX_MULTIPLY => 12,
-			CLKIN_PERIOD   => 20.0
-		 )
-		port map (
-			CLKIN    => CLK_50,
-			CLKFX    => clk_dvi_p,
-			CLKFX180 => clk_dvi_n
-		 );
-
 	inst_dvid: entity work.dvid
 	port map(
 		clk_p     => clk_dvi_p,
 		clk_n     => clk_dvi_n, 
-		clk_pixel => clk24,
+		clk_pixel => clk_dvi_pixel,
 		red_p(  7 downto 4) => VideoR,
 		red_p(  3 downto 0) => x"0",
 		green_p(7 downto 4) => VideoG,
